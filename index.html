@@ -651,7 +651,7 @@
 
         <!-- 直近1年の満了予定／満了済（一覧） -->
         <div class="card">
-            <h2>📋 直近1年の満了予定・満了済（一覧）</h2>
+            <h2>📋 直近での満了予定（済）一覧</h2>
             <div id="officerList" class="officer-list"></div>
         </div>
 
@@ -1310,57 +1310,59 @@
             renderOfficerList() {
                 const listElement = document.getElementById('officerList');
                 const today = new Date();
-                const past1y = new Date(today);
-                past1y.setFullYear(past1y.getFullYear() - 1);
-                const future1y = new Date(today);
-                future1y.setFullYear(future1y.getFullYear() + 1);
                 
-                // 満了日ベースでフィルタリング（直近±1年の満了対象）
-                const relevantOfficers = this.officers.filter(officer => {
-                    const expiryDate = new Date(officer.expiryDate);
-                    return expiryDate >= past1y && expiryDate <= future1y;
-                });
+                // 今月の開始日と終了日を取得
+                const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
                 
-                if (relevantOfficers.length === 0) {
-                    listElement.innerHTML = '<p>直近±1年の満了対象はありません。</p>';
-                    return;
-                }
+                // 来月の開始日と終了日を取得
+                const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                const nextMonthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59);
                 
-                // 満了済み（過去1年以内）と今後1年以内に分割
-                const expiredList = relevantOfficers.filter(officer => {
+                // 満了済み（今日より前）
+                const expiredList = this.officers.filter(officer => {
                     const expiryDate = new Date(officer.expiryDate);
                     return expiryDate < today;
+                }).sort((a, b) => new Date(b.expiryDate) - new Date(a.expiryDate)); // 新しい順
+                
+                // 今月満了
+                const thisMonthList = this.officers.filter(officer => {
+                    const expiryDate = new Date(officer.expiryDate);
+                    return expiryDate >= thisMonthStart && expiryDate <= thisMonthEnd;
                 }).sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
                 
-                const upcomingList = relevantOfficers.filter(officer => {
+                // 来月満了
+                const nextMonthList = this.officers.filter(officer => {
                     const expiryDate = new Date(officer.expiryDate);
-                    return expiryDate >= today;
+                    return expiryDate >= nextMonthStart && expiryDate <= nextMonthEnd;
                 }).sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+                
+                // 表示対象がない場合
+                if (thisMonthList.length === 0 && nextMonthList.length === 0 && expiredList.length === 0) {
+                    listElement.innerHTML = '<p>表示対象の満了予定・満了済みはありません。</p>';
+                    return;
+                }
                 
                 // HTML生成
                 let html = '';
                 
-                // 今後1年以内に満了予定ブロック
-                if (upcomingList.length > 0) {
+                // 今月満了予定ブロック
+                if (thisMonthList.length > 0) {
                     html += `
                         <div class="expiry-block upcoming-block">
-                            <h4 class="block-title">📅 今後1年以内に満了予定（${upcomingList.length}件）</h4>
+                            <h4 class="block-title">📅 今月満了予定（${thisMonthList.length}件）</h4>
                             <div class="officer-items">
                     `;
                     
-                    upcomingList.forEach(officer => {
+                    thisMonthList.forEach(officer => {
                         const expiryDate = new Date(officer.expiryDate);
                         const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
                         
-                        let expiryClass = 'expiry-normal';
-                        let expiryText = `満了: ${this.toJapaneseDate(expiryDate)}`;
+                        let expiryClass = 'expiry-critical';
+                        let expiryText = `⚠️ 満了まで${daysUntilExpiry}日`;
                         
-                        if (daysUntilExpiry <= 30) {
-                            expiryClass = 'expiry-critical';
-                            expiryText = `⚠️ 満了まで${daysUntilExpiry}日`;
-                        } else if (daysUntilExpiry <= 90) {
-                            expiryClass = 'expiry-soon';
-                            expiryText = `満了まで${daysUntilExpiry}日`;
+                        if (daysUntilExpiry < 0) {
+                            expiryText = `満了: ${this.toJapaneseDate(expiryDate)}`;
                         }
                         
                         html += `
@@ -1390,20 +1392,23 @@
                     `;
                 }
                 
-                // 過去1年以内に満了済みブロック
-                if (expiredList.length > 0) {
+                // 来月満了予定ブロック
+                if (nextMonthList.length > 0) {
                     html += `
-                        <div class="expiry-block expired-block">
-                            <h4 class="block-title">✅ 過去1年以内に満了済み（${expiredList.length}件）</h4>
+                        <div class="expiry-block upcoming-block">
+                            <h4 class="block-title">📅 来月満了予定（${nextMonthList.length}件）</h4>
                             <div class="officer-items">
                     `;
                     
-                    expiredList.forEach(officer => {
+                    nextMonthList.forEach(officer => {
                         const expiryDate = new Date(officer.expiryDate);
-                        const daysSinceExpiry = Math.floor((today - expiryDate) / (1000 * 60 * 60 * 24));
+                        const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+                        
+                        let expiryClass = 'expiry-soon';
+                        let expiryText = `満了まで${daysUntilExpiry}日`;
                         
                         html += `
-                            <div class="officer-item expired-item">
+                            <div class="officer-item">
                                 <div class="officer-info">
                                     <strong>${officer.companyName}${officer.isNextTerm ? ' 🔄' : ''}</strong>
                                     ${officer.isNextTerm ? '<span class="next-term-badge">次回任期</span>' : ''}
@@ -1412,8 +1417,51 @@
                                         任期: ${officer.termYears}年 | 事業年度末: ${officer.fiscalMonth}月（末日）
                                     </div>
                                 </div>
+                                <div class="expiry-date ${expiryClass}">
+                                    ${expiryText}
+                                </div>
+                                <div class="action-buttons">
+                                    <button class="edit-btn" onclick="officerManager.editOfficer(${officer.id})">編集</button>
+                                    <button class="delete-btn" onclick="officerManager.deleteOfficer(${officer.id})">削除</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // 満了済みブロック
+                if (expiredList.length > 0) {
+                    html += `
+                        <div class="expiry-block expired-block">
+                            <h4 class="block-title">✅ 満了済み（${expiredList.length}件）</h4>
+                            <div class="officer-items">
+                    `;
+                    
+                    expiredList.forEach(officer => {
+                        const expiryDate = new Date(officer.expiryDate);
+                        const daysSinceExpiry = Math.floor((today - expiryDate) / (1000 * 60 * 60 * 24));
+                        
+                        // 満了日の西暦表示
+                        const expiryDateStr = `${expiryDate.getFullYear()}/${String(expiryDate.getMonth() + 1).padStart(2, '0')}/${String(expiryDate.getDate()).padStart(2, '0')}`;
+                        
+                        html += `
+                            <div class="officer-item expired-item">
+                                <div class="officer-info">
+                                    <strong>${officer.companyName}${officer.isNextTerm ? ' 🔄' : ''}</strong>
+                                    ${officer.isNextTerm ? '<span class="next-term-badge">次回任期</span>' : ''}
+                                    <div class="officer-details">
+                                        ${officer.officerType} | 就任: ${this.toJapaneseDate(officer.appointmentDate)} | 
+                                        任期: ${officer.termYears}年 | 事業年度末: ${officer.fiscalMonth}月（末日）<br>
+                                        満了日：${expiryDateStr}（${this.toJapaneseDate(expiryDate)}）
+                                    </div>
+                                </div>
                                 <div class="expiry-date expiry-expired">
-                                    満了済み: ${this.toJapaneseDate(expiryDate)} （${daysSinceExpiry}日経過）
+                                    満了済み（${daysSinceExpiry}日経過）
                                 </div>
                                 <div class="action-buttons">
                                     <button class="edit-btn" onclick="officerManager.editOfficer(${officer.id})">編集</button>
@@ -1485,9 +1533,13 @@
                         const yearData = yearGroups[year];
                         const totalCount = yearData.reduce((sum, month) => sum + month.officers.length, 0);
                         
+                        // 令和年の計算
+                        const reiwaYear = parseInt(year) - 2018;
+                        const yearDisplay = reiwaYear > 0 ? `${year}年（令和${reiwaYear}年）` : `${year}年`;
+                        
                         html += `
                             <div class="year-frame">
-                                <div class="year-title">${year}年（合計${totalCount}件）</div>
+                                <div class="year-title">${yearDisplay}（合計${totalCount}件）</div>
                                 <div class="month-grid">
                         `;
                         
